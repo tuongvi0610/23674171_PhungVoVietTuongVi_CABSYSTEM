@@ -199,9 +199,7 @@ flowchart TD
 **Bước 7: Phân rã yêu cầu chức năng**
 ## PHÂN RÃ YÊU CẦU CHỨC NĂNG (Functional Decomposition)
 
-Hệ thống CAB System được phân rã thành 4 phân hệ chính: Khách hàng, Tài xế, Quản trị viên và Lõi hệ thống (Backend Engine).
-
-### Bảng Phân rã Chức năng chi tiết
+Hệ thống CAB System được phân rã thành 4 phân hệ chính: Khách hàng, Tài xế, Quản trị viên và Lõi hệ thống 
 
 | Phân hệ (Module) | Nhóm chức năng (Feature) | Mã UC | Chức năng chi tiết (Sub-function) | Ưu tiên |
 | :--- | :--- | :--- | :--- | :---: |
@@ -239,3 +237,301 @@ Hệ thống CAB System được phân rã thành 4 phân hệ chính: Khách h�
 | | **4.2. Xử lý logic** | F-COR-03 | Thuật toán tính cước phí (Dựa trên khoảng cách + Loại xe) | Cao |
 | | | F-COR-04 | Tích hợp cổng thanh toán bên thứ 3 (Payment Gateway API) | Cao |
 | | | F-COR-05 | Hệ thống gửi thông báo đa kênh (Push Notification / SMS) | Cao |
+
+**Bước 8: Business Rules and Exception**
+## 5. QUY TẮC NGHIỆP VỤ & TRƯỜNG HỢP NGOẠI LỆ
+
+### 5.1. Quy tắc nghiệp vụ (Business Rules)
+Đây là các quy tắc logic hệ thống bắt buộc tuân thủ. Các thông số [Nằm trong ngoặc vuông] là các tham số có thể cấu hình (Configurable) trên hệ thống quản trị.
+
+| Mã BR | Nhóm | Mô tả Quy tắc (Business Rule Description) |
+| :--- | :--- | :--- |
+| **BR-01** | **Trạng thái Tài xế** | Tài xế chỉ nhận được yêu cầu điều phối chuyến đi mới khi và chỉ khi: (1) Tài khoản đang "Hoạt động", (2) App đang bật "Sẵn sàng nhận chuyến", và (3) Không đang thực hiện cuốc xe nào khác. |
+| **BR-02** | **Logic Điều phối (Matching)** | Thuật toán ưu tiên: Ưu tiên 1 là khoảng cách (Bán kính `[3km]` tính từ điểm đón), Ưu tiên 2 là Tài xế có thời gian chờ lâu nhất. |
+| **BR-03** | **Thời gian chờ (Timeout)** | Tài xế có tối đa `[15 giây]` để Chấp nhận hoặc Từ chối chuyến. Quá thời gian này, hệ thống tự động tính là "Bỏ qua" và chuyển cuốc cho tài xế phù hợp tiếp theo. |
+| **BR-04** | **Tính cước phí** | Cước phí chuyến đi = Giá mở cửa + (Khoảng cách GPS dự kiến x Giá mỗi km). Cước phí hiển thị lúc đặt xe là **giá cố định (Fixed Price)**, không thay đổi trừ khi khách hàng đổi điểm đến. |
+| **BR-05** | **Chính sách Thanh toán** | CAB System tuyệt đối không lưu trữ thông tin số thẻ tín dụng/CVV của khách hàng. Việc mã hóa (Tokenization) và trừ tiền do Cổng thanh toán (Payment Gateway) thực hiện. |
+| **BR-06** | **Chính sách Hủy chuyến** | Khách hàng được hủy chuyến **Miễn phí** nếu tài xế chưa đến điểm đón. Nếu tài xế đã xác nhận "Đã đến điểm đón" mà khách hủy, hệ thống ghi nhận `[1 lần vi phạm]`. Nếu vi phạm `[3 lần/ngày]`, khóa tính năng đặt xe `[24 giờ]`. |
+
+---
+
+### 5.2. Các trường hợp ngoại lệ (Exceptions & Handling)
+Các kịch bản ngoài "Happy Path" và cách hệ thống tự động xử lý (Fallback Mechanism) để không làm gián đoạn trải nghiệm người dùng.
+
+| Mã EX | Tình huống ngoại lệ (Exception Scenario) | Hướng xử lý của Hệ thống (System Action / Fallback) |
+| :--- | :--- | :--- |
+| **EX-01** | **Không tìm thấy tài xế** <br> *(Quét hết bán kính nhưng không có tài xế nào nhận hoặc online)* | Gửi thông báo Push Notification: "Hiện tại các tài xế đều đang bận. Vui lòng thử lại sau ít phút". Nút thao tác nhanh: [Thử lại ngay]. Không yêu cầu nhập lại điểm đi/đến. |
+| **EX-02** | **Thanh toán điện tử thất bại** <br> *(Lỗi từ ví điện tử/ngân hàng, không đủ số dư, timeout)* | 1. Hệ thống báo lỗi thanh toán trên app Khách hàng.<br> 2. Chuyển trạng thái chuyến đi sang "Thanh toán bằng Tiền mặt" để khách trả cho tài xế, HOẶC cho phép "Ghi nợ" vào tài khoản khách hàng để trừ vào chuyến sau. |
+| **EX-03** | **Mất kết nối mạng (Tài xế)** <br> *(Tài xế rớt mạng 3G/4G khi đang chở khách)* | Hệ thống lưu trữ trạng thái chuyến đi hiện tại trên Server. Khi tài xế có mạng lại, App tự động đồng bộ (Sync) dữ liệu về cuốc xe đang chạy. Cuốc xe tính theo định tuyến map ban đầu, không dựa vào định vị ngắt quãng. |
+| **EX-04** | **Tài xế cố tình không đón khách** <br> *(Tài xế đã nhận chuyến nhưng xe đứng yên quá `[10 phút]`)* | Hệ thống tự động bật cảnh báo (Popup) hỏi Khách hàng: "Tài xế có vẻ đang kẹt. Bạn có muốn tìm tài xế khác không?". Nếu Khách đồng ý, tự động Hủy chuyến (Không phạt khách) và tìm tài xế mới. |
+| **EX-05** | **Khách hàng không xuất hiện (No-show)** <br> *(Tài xế đến nơi, chờ quá `[5 phút]` nhưng không liên lạc được)* | Cấp quyền cho Tài xế bấm nút "Hủy chuyến do Khách vắng mặt" mà không bị ảnh hưởng tỷ lệ hoàn thành cuốc. Khách hàng bị ghi nhận 1 lần vi phạm (No-show). |
+
+**Bước 9: Data Modeling**
+### 6.1. Sơ đồ Thực thể - Liên kết (ERD - Entity Relationship Diagram)
+
+```mermaid
+erDiagram
+    %% Định nghĩa các bảng và thuộc tính
+    USER {
+        int user_id PK
+        string phone_number
+        string password_hash
+        string role "RIDER, DRIVER, ADMIN"
+        string account_status "Active, Banned"
+        datetime created_at
+    }
+
+    RIDER {
+        int rider_id PK
+        int user_id FK
+        string full_name
+        string email
+        float average_rating
+    }
+
+    DRIVER {
+        int driver_id PK
+        int user_id FK
+        string full_name
+        string identity_card
+        string driver_license
+        string work_status "Offline, Online, Busy"
+        float current_lat
+        float current_lng
+        float average_rating
+    }
+
+    VEHICLE {
+        int vehicle_id PK
+        int driver_id FK
+        string license_plate
+        string vehicle_type "Bike, Car4, Car7"
+        string brand_model
+        string color
+    }
+
+    TRIP {
+        int trip_id PK
+        int rider_id FK
+        int driver_id FK "Nullable lúc mới tạo"
+        string pickup_address
+        float pickup_lat
+        float pickup_lng
+        string dropoff_address
+        float dropoff_lat
+        float dropoff_lng
+        decimal total_fare
+        string status "Pending, Accepted, PickedUp, Completed, Cancelled"
+        datetime created_at
+        datetime completed_at
+    }
+
+    PAYMENT {
+        int payment_id PK
+        int trip_id FK
+        string method "Cash, E-Wallet, Card"
+        decimal amount
+        string status "Pending, Success, Failed"
+        string transaction_ref "Mã tham chiếu từ API đối tác"
+    }
+
+    %% Các mối quan hệ (Relationships)
+    USER ||--o| RIDER : "phân quyền thành"
+    USER ||--o| DRIVER : "phân quyền thành"
+    DRIVER ||--|| VEHICLE : "sở hữu / điều khiển"
+    RIDER ||--o{ TRIP : "đặt"
+    DRIVER ||--o{ TRIP : "nhận và thực hiện"
+    TRIP ||--|| PAYMENT : "phát sinh giao dịch"
+```
+
+---
+
+### 6.2. Từ điển Dữ liệu (Data Dictionary - Các thực thể cốt lõi)
+
+**1. Bảng `TRIP` (Lưu trữ thông tin cuốc xe - Bảng quan trọng nhất)**
+Bảng này xử lý toàn bộ vòng đời của một chuyến đi. Việc thiết kế lưu tọa độ (Lat/Lng) tách biệt với địa chỉ (Address) giúp hệ thống dễ dàng tính toán khoảng cách và kết nối với Map API.
+*   **trip_id** (PK): Mã chuyến đi duy nhất.
+*   **rider_id** (FK): ID của khách hàng đặt xe.
+*   **driver_id** (FK): ID của tài xế nhận chuyến (Cho phép `NULL` lúc khách vừa ấn đặt xe và đang chờ hệ thống tìm tài xế).
+*   **pickup_lat / pickup_lng**: Tọa độ điểm đón.
+*   **dropoff_lat / dropoff_lng**: Tọa độ điểm đến.
+*   **total_fare**: Giá cước cuốc xe (Fix cứng khi khách bấm đặt).
+*   **status**: Trạng thái chuyến đi (`Pending` -> `Accepted` -> `Arrived` -> `PickedUp` -> `InTransit` -> `Completed` / `Cancelled`).
+
+**2. Bảng `DRIVER` (Lưu trữ thông tin & Trạng thái tài xế)**
+Thiết kế tập trung vào việc phục vụ **Thuật toán điều phối (Matching Engine)** với hiệu suất cao.
+*   **work_status**: Trạng thái làm việc (`Online` - sẵn sàng nhận cuốc, `Busy` - đang chở khách không nhận thêm cuốc, `Offline` - tắt app). Thuật toán chỉ quét các tài xế có status là `Online`.
+*   **current_lat / current_lng**: Tọa độ GPS hiện tại của tài xế. (Lưu ý: Trong hệ thống thực tế, tọa độ này sẽ được cập nhật liên tục qua Redis/Websocket để tracking realtime thay vì ghi liên tục vào Database SQL để tránh sập hệ thống).
+
+**3. Bảng `PAYMENT` (Lưu trữ Giao dịch Thanh toán)**
+Tuân thủ chuẩn bảo mật PCI-DSS theo yêu cầu của doanh nghiệp (Không lưu thông tin nhạy cảm).
+*   **method**: Phương thức thanh toán (Tiền mặt, Thẻ, Ví điện tử).
+*   **transaction_ref**: Mã giao dịch (Token/Ref ID) trả về từ Cổng thanh toán bên thứ 3. Nếu có lỗi xảy ra, Nhân viên vận hành sẽ dùng mã này để đối soát (Cross-check) với đối tác.
+*   **status**: `Pending` (Đang chờ), `Success` (Thành công), `Failed` (Thất bại).
+
+**4. Bảng `VEHICLE` (Lưu trữ thông tin Xe)**
+*   Được tách ra khỏi bảng `DRIVER` để linh hoạt. Trong tương lai (Phase 2), nếu 1 tài xế có thể đăng ký nhiều xe hoặc đổi xe, ta chỉ cần thay đổi khóa phụ (FK) mà không bị kẹt kiến trúc.
+
+**Bước 10: Non-Functional Requirement**
+
+Yêu cầu phi chức năng xác định các tiêu chí chất lượng (Quality Attributes) để đánh giá hoạt động của hệ thống, thay vì các hành vi cụ thể. Đối với CAB System, các NFRs này là kim chỉ nam cho thiết kế Kiến trúc phần mềm (System Architecture).
+
+### Bảng Chi tiết Yêu cầu Phi chức năng
+
+| Nhóm NFR | Mã NFR | Mô tả tiêu chí chất lượng (Quality Criteria) |
+| :--- | :--- | :--- |
+| **1. Khả năng mở rộng & Hiệu năng (Scalability & Performance)** | **NFR-PER-01** | **Thời gian phản hồi (Response Time):** Các thao tác quan trọng như "Lấy giá cước", "Tìm tài xế" phải phản hồi dưới `2 giây` ở điều kiện mạng bình thường (4G/Wifi). |
+| | **NFR-PER-02** | **Xử lý đồng thời (Concurrency):** Hệ thống core phải xử lý mượt mà tối thiểu `[1000]` cuốc xe được đặt cùng một thời điểm trong giờ cao điểm mà không bị nghẽn cổ chai (bottleneck). |
+| | **NFR-PER-03** | **Kiến trúc phân tán (Decoupling):** Các module Đặt xe, Thanh toán, và Thông báo phải được thiết kế độc lập. Cho phép tăng tài nguyên (Scale-up/Scale-out) riêng biệt cho từng service khi tải tăng. |
+| **2. Tính sẵn sàng & Chịu lỗi (Availability & Fault Tolerance)** | **NFR-AVA-01** | **Thời gian hoạt động (Uptime):** Hệ thống phải đảm bảo hoạt động liên tục với cam kết Uptime đạt `99.9%` (Khoảng 43 phút downtime tối đa mỗi tháng). |
+| | **NFR-AVA-02** | **Cô lập lỗi (Fault Isolation):** Lỗi ở các dịch vụ ngoại vi (Ví dụ: Đối tác thanh toán sập, lỗi API gửi SMS) **tuyệt đối không** được làm sập chức năng Đặt xe (Core Booking). Hệ thống phải có cơ chế bỏ qua (Bypass) hoặc dùng giải pháp thay thế. |
+| **3. Bảo mật & Kiểm toán (Security & Audit)** | **NFR-SEC-01** | **Xác thực (Authentication):** 100% API dành cho người dùng (Khách, Tài xế, Admin) phải được xác thực qua Token (ví dụ: JWT - JSON Web Token). Cấp quyền truy cập dựa trên vai trò (RBAC) cho Admin. |
+| | **NFR-SEC-02** | **Bảo mật thanh toán (PCI-DSS):** Hệ thống không lưu trữ thông tin số thẻ tín dụng, mã CVV hay mật khẩu ngân hàng. Mọi giao dịch dùng công nghệ mã hóa Tokenization do bên thứ 3 cung cấp. |
+| | **NFR-SEC-03** | **Lưu vết (Audit Logging):** Mọi hành động thao tác dữ liệu nhạy cảm trên Admin Dashboard (Hủy chuyến của khách, khóa tài khoản tài xế, thay đổi cấu hình giá cước) đều phải được ghi log (Thời gian, User thực hiện, IP, Hành động). |
+| | **NFR-SEC-04** | **Bảo vệ dữ liệu cá nhân:** Mật khẩu người dùng phải được mã hóa một chiều (Hashing bằng bcrypt/Argon2). Dữ liệu vị trí GPS của khách hàng phải được mã hóa khi truyền tải (HTTPS/TLS 1.2+). |
+| **4. Trải nghiệm & Tính tương thích (Usability & Compatibility)** | **NFR-USE-01** | **Tối ưu Pin & Băng thông:** App Tài xế phải tối ưu hóa việc gửi tọa độ GPS (ví dụ: `5 giây/lần` thay vì gửi liên tục 1 giây/lần) để tránh nóng máy, hao pin và tốn dung lượng 4G của tài xế. |
+| | **NFR-USE-02** | **Xử lý Offline:** Trong trường hợp app Khách hàng/Tài xế bị mất mạng giữa chừng, app phải lưu cache trạng thái chuyến đi hiện tại và tự động đồng bộ (Auto-sync) lại với Server ngay khi có mạng lưới trở lại. |
+| **5. Tính bảo trì & Mở rộng tương lai (Maintainability)** | **NFR-MNT-01** | **Mở rộng dễ dàng (Extensibility):** Kiến trúc Database và Code phải được thiết kế linh hoạt (áp dụng Design Patterns) để tương lai có thể thêm "Giao thức ăn", "Giao hàng", thêm Cổng thanh toán mới mà không cần đập đi viết lại (No rewrite). |
+
+**Bước 11: Design use case**
+```mermaid
+flowchart LR
+    %% Định nghĩa các Tác nhân (Actors)
+    Rider((Khách hàng))
+    Driver((Tài xế))
+    Admin((Nhân viên <br> Vận hành))
+    Sys((Core Engine))
+    Pay[[Cổng thanh toán]]
+
+    %% Định nghĩa hệ thống
+    subgraph CAB_System [HỆ THỐNG CAB SYSTEM]
+        direction TB
+        UC1([Đăng ký / Đăng nhập])
+        UC2([Tạo yêu cầu Đặt xe])
+        UC3([Điều phối & Tìm tài xế])
+        UC4([Cập nhật trạng thái chuyến])
+        UC5([Thanh toán cước phí])
+        UC6([Đánh giá & Phản hồi])
+        UC7([Quản lý dữ liệu & Báo cáo])
+    end
+
+    %% Liên kết Tác nhân và Use Case
+    Rider --> UC1
+    Rider --> UC2
+    Rider --> UC5
+    Rider --> UC6
+
+    Driver --> UC1
+    Driver --> UC4
+    Driver --> UC6
+
+    Admin --> UC7
+
+    %% Liên kết nội bộ và hệ thống ngoài
+    UC2 -.->|Kích hoạt| UC3
+    Sys --> UC3
+    UC4 -.->|Kích hoạt| UC5
+    UC5 --> Pay
+```
+
+---
+
+## Bước 12: ĐẶC TẢ USE CASE (USE CASE SPECIFICATION)
+### Đặc tả UC-02: Đặt xe & Tìm tài xế 
+
+| Thuộc tính | Chi tiết |
+| :--- | :--- |
+| **Mã Use Case** | UC-02 |
+| **Tên Use Case** | Tạo yêu cầu đặt xe và Điều phối tài xế |
+| **Tác nhân chính (Primary Actor)** | Khách hàng (Rider) |
+| **Tác nhân phụ (Secondary Actor)** | Tài xế (Driver), Hệ thống lõi (Core Engine) |
+| **Mô tả (Description)** | Khách hàng nhập điểm đi/đến, chọn loại xe và xác nhận đặt chuyến. Hệ thống tự động quét vị trí và phân công cuốc xe cho tài xế phù hợp gần nhất. |
+| **Điều kiện tiên quyết (Pre-conditions)** | 1. Khách hàng đã đăng nhập thành công và bật định vị GPS.<br>2. Tài xế đã đăng nhập và đang bật trạng thái "Sẵn sàng nhận chuyến". |
+| **Hậu điều kiện (Post-conditions)** | 1. Yêu cầu đặt xe được tạo thành công trên Database với trạng thái `Đang tìm tài xế` hoặc `Tài xế đã nhận`.<br>2. Màn hình khách hàng chuyển sang giao diện theo dõi lộ trình. |
+
+#### 1. Luồng sự kiện chính (Main Flow / Happy Path)
+Luồng này xảy ra khi mọi thao tác đều diễn ra suôn sẻ và tài xế đầu tiên đồng ý nhận chuyến.
+
+1. **Khách hàng** mở ứng dụng. Hệ thống tự động lấy tọa độ GPS hiện tại làm "Điểm đón".
+2. **Khách hàng** nhập "Điểm đến" (thông qua tìm kiếm địa chỉ hoặc ghim trên bản đồ).
+3. **Khách hàng** chọn "Loại dịch vụ" (VD: Xe máy, Ô tô 4 chỗ).
+4. **Hệ thống** gọi Map API để tính toán khoảng cách, sau đó áp dụng công thức để hiển thị **Giá cước dự kiến**.
+5. **Khách hàng** bấm nút [Đặt xe].
+6. **Hệ thống** lưu yêu cầu và kích hoạt *Thuật toán điều phối*: Quét bán kính `[3km]` để tìm các tài xế có trạng thái `Sẵn sàng` và loại xe phù hợp.
+7. **Hệ thống** gửi thông báo (Ping) có cuốc mới đến ứng dụng của **Tài xế** gần nhất.
+8. **Tài xế** bấm [Chấp nhận] chuyến đi trong vòng `[15 giây]`.
+9. **Hệ thống** cập nhật trạng thái chuyến thành `Tài xế đã nhận` và gửi thông báo cho Khách hàng kèm theo: Tên tài xế, Biển số xe, Thời gian dự kiến đến (ETA).
+10. Use Case kết thúc (Chuyển sang luồng UC-04: Cập nhật trạng thái chuyến).
+
+#### 2. Luồng thay thế (Alternative Flows)
+Các luồng xử lý vòng lặp nghiệp vụ (Business loop) nhưng không phải là lỗi.
+
+*   **2.1. Thay đổi điểm đón:** Ở bước 1, Khách hàng không muốn dùng GPS hiện tại mà tự nhập/kéo ghim một địa chỉ "Điểm đón" khác. Hệ thống cập nhật điểm đón mới và tiếp tục bước 2.
+*   **2.2. Vòng lặp Tìm tài xế (Fallback Matching):** Tại bước 8, nếu **Tài xế 1** bấm [Từ chối] HOẶC quá `[15 giây]` không phản hồi:
+    *   Hệ thống thu hồi yêu cầu từ Tài xế 1.
+    *   Hệ thống tự động chuyển yêu cầu sang **Tài xế 2** (gần thứ hai trong bán kính).
+    *   Quy trình lặp lại cho đến khi có người nhận hoặc hết danh sách tài xế trong bán kính.
+
+#### 3. Luồng ngoại lệ (Exception Flows)
+Các tình huống gây gián đoạn quy trình và cách hệ thống báo lỗi.
+
+*   **3.1. Không tìm thấy tài xế (No Drivers Available):** Nếu thuật toán ở bước 6 (hoặc vòng lặp ở bước 2.2) quét hết bán kính nhưng không có ai nhận chuyến.
+    *   **Hệ thống** hủy yêu cầu đặt xe ngầm.
+    *   Hiển thị thông báo (Popup) cho Khách hàng: *"Hiện tại các tài xế đều đang bận. Vui lòng thử lại sau ít phút."*
+    *   Hiển thị nút [Thử lại ngay]. Khách hàng không cần phải nhập lại điểm đi/đến.
+*   **3.2. Mất kết nối GPS / Lỗi Map API:** Ở bước 4, nếu hệ thống không tính toán được khoảng cách do lỗi API Bản đồ.
+    *   Hiển thị thông báo: *"Không thể xác định lộ trình. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại địa chỉ khác."*
+    *   Vô hiệu hóa (Disable) nút [Đặt xe] để chặn khách hàng tạo chuyến không có giá.
+**Bước 13: Tiêu chí chấp nhận AC**
+### Kịch bản 1: Đặt xe thành công (Happy Path)
+*   **Given (Giả định):** 
+    * Khách hàng đã chọn "Điểm đón", "Điểm đến", "Loại xe" hợp lệ và đang ở màn hình hiển thị Giá cước.
+    * Có ít nhất 1 Tài xế phù hợp đang bật trạng thái "Sẵn sàng" trong bán kính `3km`.
+*   **When (Khi):** Khách hàng bấm nút `[Xác nhận Đặt xe]`.
+*   **Then (Thì):**
+    1. Hệ thống lưu trạng thái chuyến đi là `Đang tìm tài xế`.
+    2. Màn hình Khách hàng chuyển sang giao diện "Đang tìm tài xế" (Hiển thị vòng quay loading).
+    3. Hệ thống gửi thông báo (Ping) có cuốc mới đến màn hình App của Tài xế gần nhất.
+    4. Giao diện nhận cuốc của Tài xế phải hiển thị đủ: Điểm đón, Điểm đến, Khoảng cách và Giá cước.
+
+### Kịch bản 2: Tài xế chấp nhận chuyến đi
+*   **Given (Giả định):** Màn hình App Tài xế đang hiển thị thông báo cuốc xe mới.
+*   **When (Khi):** Tài xế bấm nút `[Nhận chuyến]` trong thời gian quy định (`< 15 giây`).
+*   **Then (Thì):**
+    1. Hệ thống ghi nhận tài xế cho chuyến đi này và đổi trạng thái thành `Tài xế đã nhận`.
+    2. Màn hình Khách hàng hiển thị thông tin tài xế (Tên, Biển số xe, Loại xe, Đánh giá sao).
+    3. Màn hình Khách hàng cập nhật bản đồ hiển thị vị trí thực của tài xế đang di chuyển đến và Thời gian dự kiến đến (ETA).
+    4. Trạng thái của Tài xế được hệ thống chuyển sang `Đang bận` (Không nhận thêm cuốc khác).
+
+### Kịch bản 3: Tài xế từ chối hoặc Hết thời gian chờ (Timeout / Fallback)
+*   **Given (Giả định):** App Tài xế thứ 1 đang hiển thị yêu cầu nhận cuốc xe.
+*   **When (Khi):** Tài xế thứ 1 bấm `[Từ chối]` HOẶC không thao tác gì quá thời gian `15 giây`.
+*   **Then (Thì):**
+    1. Yêu cầu hiển thị trên App của Tài xế 1 tự động biến mất.
+    2. Giao diện của Khách hàng **không** bị lỗi, vẫn tiếp tục hiển thị trạng thái "Đang tìm tài xế".
+    3. Hệ thống tự động chuyển yêu cầu cuốc xe này cho Tài xế phù hợp gần thứ 2.
+
+### Kịch bản 4: Không tìm thấy tài xế (Exception)
+*   **Given (Giả định):** Hệ thống đang quét tìm tài xế.
+*   **When (Khi):** Không có tài xế nào trong bán kính quy định (hoặc tất cả tài xế trong bán kính đều từ chối).
+*   **Then (Thì):**
+    1. Hệ thống tự động hủy ngầm lệnh tìm kiếm.
+    2. Hiển thị Popup thông báo cho Khách hàng: *"Hiện tại các tài xế đều đang bận. Vui lòng thử lại sau ít phút."*
+    3. Hiển thị nút `[Thử lại]`.
+    4. Khi khách hàng bấm `[Thử lại]`, hệ thống giữ nguyên "Điểm đón" và "Điểm đến", không bắt khách hàng nhập lại từ đầu.
+
+### Kịch bản 5: Kiểm tra tính đúng đắn của dữ liệu cước phí (Data Validation)
+*   **Given (Giả định):** Khách hàng chọn lộ trình từ Điểm A đến Điểm B.
+*   **When (Khi):** Hệ thống tính toán và trả về giá cước trên màn hình.
+*   **Then (Thì):** Giá cước hiển thị phải khớp chính xác với công thức: `Giá mở cửa + (Khoảng cách API x Đơn giá của Loại xe đã chọn)`. Không được phép có sai số làm tròn gây thiệt hại cho khách hàng hoặc tài xế.
+
+**Bước 14: Truy xuất nguồn gốc yêu cầu**
+
+| ID Vấn đề / Kỳ vọng gốc (Business Needs) | Mô tả vấn đề từ Khách hàng | ID Quy tắc (BR / NFR) liên quan | ID Chức năng / Use Case đáp ứng |
+| :--- | :--- | :--- | :--- |
+| **BN-01** | **Phân công thủ công:** "Việc phân công tài xế chủ yếu được thực hiện thủ công... Ban lãnh đạo muốn tự động hóa tìm tài xế gần khách." | BR-01, BR-02, BR-03 | **UC-S2:** Điều phối & Ghép cuốc <br> **F-COR-01:** Quét tài xế gần nhất <br> **F-COR-02:** Vòng lặp chuyển cuốc |
+| **BN-02** | **Mù thông tin chuyến đi:** "Khách hàng khó theo dõi trạng thái chuyến đi... muốn biết thời gian dự kiến tài xế đến." | BR-01 | **UC-R3:** Theo dõi hành trình <br> **F-RID-07:** Tracking Real-time <br> **F-DRI-06..08:** Tài xế cập nhật trạng thái |
+| **BN-03** | **Quản lý thanh toán rủi ro:** "Thanh toán chưa được quản lý tập trung... không lưu thông tin nhạy cảm của thẻ trực tiếp vào CAB." | BR-04, BR-05 | **UC-R4:** Thanh toán cước phí <br> **F-COR-04:** Gọi API Cổng thanh toán <br> **NFR-SEC-02:** Bảo mật PCI-DSS |
+| **BN-04** | **Nút thắt Vận hành:** "Bộ phận vận hành gặp khó... cần giao diện để hỗ trợ xử lý lỗi chuyến, xem báo cáo doanh thu, tỷ lệ hủy." | BR-06 (Chính sách hủy) | **UC-A1..A4:** Phân hệ Quản trị Admin <br> **F-ADM-04:** Xử lý sự cố chuyến <br> **F-ADM-06, 07:** Báo cáo Dashboard |
+| **BN-05** | **Rủi ro sập hệ thống:** "Không muốn một lỗi ở thanh toán làm sập toàn bộ hệ thống đặt xe... có thể mở rộng độc lập." | N/A (Thuộc nhóm Phi chức năng) | **NFR-PER-03:** Kiến trúc phân tán <br> **NFR-AVA-02:** Cô lập lỗi (Fault Isolation) |
+| **BN-06** | **Xử lý ngoại lệ thanh toán/thông báo:** "Thanh toán thất bại phải cho xử lý lại... có thông báo rõ ràng từng chặng." | BR-05 | **EX-02:** Xử lý thanh toán lỗi <br> **F-COR-05:** Gửi Push Notification |
