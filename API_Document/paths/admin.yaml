@@ -1,0 +1,110 @@
+users:
+  get:
+    tags: [Admin]
+    summary: Search and list users
+    parameters:
+      - { name: role, in: query, schema: { type: string, enum: [RIDER, DRIVER, ADMIN] } }
+      - { name: accountStatus, in: query, schema: { type: string, enum: [ACTIVE, BANNED, PENDING] } }
+      - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+      - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    responses:
+      '200':
+        description: User list.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items: { type: array, items: { $ref: '../components/schemas.yaml#/components/schemas/User' } }
+                pageInfo: { $ref: '../components/schemas.yaml#/components/schemas/PageInfo' }
+  patch:
+    tags: [Admin]
+    summary: Update user account status
+    parameters:
+      - { name: userId, in: query, required: true, schema: { type: integer, format: int64 } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [accountStatus]
+            properties:
+              accountStatus: { type: string, enum: [ACTIVE, BANNED] }
+    responses:
+      '200':
+        description: User updated and audit logged.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/User' }
+approveDriver:
+  post:
+    tags: [Admin]
+    summary: Approve a driver account
+    parameters:
+      - { name: driverId, in: path, required: true, schema: { type: integer, format: int64 } }
+    responses:
+      '200':
+        description: Driver approved.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Driver' }
+      '404': { $ref: '../components/schemas.yaml#/components/responses/NotFound' }
+trips:
+  get:
+    tags: [Admin]
+    summary: Monitor trips in real time
+    parameters:
+      - { name: status, in: query, schema: { type: string, enum: [SEARCHING, ACCEPTED, ARRIVED, PICKED_UP, IN_TRANSIT, COMPLETED, CANCELLED] } }
+      - { name: from, in: query, schema: { type: string, format: date-time } }
+      - { name: to, in: query, schema: { type: string, format: date-time } }
+    responses:
+      '200':
+        description: Trips for operational monitoring.
+        content:
+          application/json:
+            schema: { type: array, items: { $ref: '../components/schemas.yaml#/components/schemas/Trip' } }
+cancelTrip:
+  post:
+    tags: [Admin]
+    summary: Force-cancel a trip for operational support
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: integer, format: int64 } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              reason: { type: string, example: Vehicle breakdown }
+    responses:
+      '200':
+        description: Trip cancelled and audit logged.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Trip' }
+      '404': { $ref: '../components/schemas.yaml#/components/responses/NotFound' }
+      '409': { $ref: '../components/schemas.yaml#/components/responses/Conflict' }
+summary:
+  get:
+    tags: [Admin]
+    summary: Get operational and revenue summary
+    parameters:
+      - { name: from, in: query, required: true, schema: { type: string, format: date } }
+      - { name: to, in: query, required: true, schema: { type: string, format: date } }
+    responses:
+      '200':
+        description: Dashboard metrics.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                totalTrips: { type: integer, example: 1250 }
+                completedTrips: { type: integer, example: 1100 }
+                cancelledTrips: { type: integer, example: 150 }
+                completionRate: { type: number, format: float, example: 0.88 }
+                revenue: { type: number, format: double, example: 152500000 }
+                currency: { type: string, example: VND }

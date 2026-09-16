@@ -1,0 +1,1231 @@
+openapi: 3.0.3
+info:
+  title: CAB System API
+  version: 1.0.0
+  description: |
+    API cho nền tảng đặt xe CAB System. Tài liệu bám theo SRS MVP 7 tuần,
+    gồm rider, driver, dispatch, trip, payment và vận hành admin.
+  contact:
+    name: CAB System Development Team
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.cabsystem.example.com/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Local development
+security:
+  - BearerAuth: []
+tags:
+  - name: Authentication
+    description: Registration and token lifecycle.
+  - name: Rider
+    description: Customer profile, fare estimate and post-trip actions.
+  - name: Driver
+    description: Driver availability, offers, GPS and trip lifecycle.
+  - name: Trips
+    description: Booking, tracking and payment operations.
+  - name: Admin
+    description: Operational support, user management and reports.
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a rider account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phoneNumber
+                - password
+                - fullName
+              properties:
+                phoneNumber:
+                  type: string
+                  example: '0901234567'
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  example: StrongPass123!
+                fullName:
+                  type: string
+                  example: Nguyen Van An
+                email:
+                  type: string
+                  format: email
+                  example: rider@example.com
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login as rider, driver or admin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phoneNumber
+                - password
+              properties:
+                phoneNumber:
+                  type: string
+                  example: '0901234567'
+                password:
+                  type: string
+                  format: password
+                  example: StrongPass123!
+      responses:
+        '200':
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New access token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  expiresIn:
+                    type: integer
+                    example: 3600
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /rider/profile:
+    get:
+      tags:
+        - Rider
+      summary: Get current rider profile
+      responses:
+        '200':
+          description: Rider profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags:
+        - Rider
+      summary: Update current rider profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName:
+                  type: string
+                  example: Nguyen Van An
+                email:
+                  type: string
+                  format: email
+                  example: rider@example.com
+      responses:
+        '200':
+          description: Updated profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /rider/estimate:
+    post:
+      tags:
+        - Rider
+      summary: Calculate fixed fare estimate before booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pickup
+                - dropoff
+                - serviceType
+              properties:
+                pickup:
+                  $ref: '#/components/schemas/LocationInput'
+                dropoff:
+                  $ref: '#/components/schemas/LocationInput'
+                serviceType:
+                  type: string
+                  enum:
+                    - BIKE
+                    - CAR4
+                    - CAR7
+      responses:
+        '200':
+          description: Fare estimate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FareEstimate'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          description: Map provider unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /rider/trips:
+    get:
+      tags:
+        - Rider
+      summary: List current rider trips
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - SEARCHING
+              - ACCEPTED
+              - COMPLETED
+              - CANCELLED
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated trips.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Trip'
+                  pageInfo:
+                    $ref: '#/components/schemas/PageInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /rider/trips/{tripId}/cancel:
+    post:
+      tags:
+        - Rider
+      summary: Cancel a trip before pickup
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  example: Changed plan
+      responses:
+        '200':
+          description: Trip cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /rider/trips/{tripId}/rating:
+    post:
+      tags:
+        - Rider
+      summary: Rate a completed trip and driver
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - score
+              properties:
+                score:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  example: 5
+                comment:
+                  type: string
+                  example: Friendly and on time.
+      responses:
+        '201':
+          description: Rating created.
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /driver/profile:
+    get:
+      tags:
+        - Driver
+      summary: Get current driver profile and vehicle
+      responses:
+        '200':
+          description: Driver profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Driver'
+    patch:
+      tags:
+        - Driver
+      summary: Update driver and vehicle information
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName:
+                  type: string
+                vehicle:
+                  $ref: '#/components/schemas/Vehicle'
+      responses:
+        '200':
+          description: Updated profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Driver'
+  /driver/status:
+    patch:
+      tags:
+        - Driver
+      summary: Toggle driver availability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - workStatus
+              properties:
+                workStatus:
+                  type: string
+                  enum:
+                    - ONLINE
+                    - OFFLINE
+      responses:
+        '200':
+          description: New driver status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Driver'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /driver/location:
+    post:
+      tags:
+        - Driver
+      summary: Send current GPS location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - location
+              properties:
+                location:
+                  $ref: '#/components/schemas/GeoPoint'
+                recordedAt:
+                  type: string
+                  format: date-time
+      responses:
+        '202':
+          description: Location accepted.
+  /driver/trip-offers:
+    get:
+      tags:
+        - Driver
+      summary: List active trip offers assigned to driver
+      responses:
+        '200':
+          description: Active offers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    offerId:
+                      type: integer
+                      format: int64
+                      example: 9001
+                    expiresAt:
+                      type: string
+                      format: date-time
+                    trip:
+                      $ref: '#/components/schemas/Trip'
+  /driver/trip-offers/{offerId}/respond:
+    post:
+      tags:
+        - Driver
+      summary: Accept or reject a trip offer within 15 seconds
+      parameters:
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - decision
+              properties:
+                decision:
+                  type: string
+                  enum:
+                    - ACCEPT
+                    - REJECT
+      responses:
+        '200':
+          description: Offer response processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /driver/trips/{tripId}/status:
+    patch:
+      tags:
+        - Driver
+      summary: Update trip lifecycle status
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                    - ARRIVED
+                    - PICKED_UP
+                    - IN_TRANSIT
+                    - COMPLETED
+                location:
+                  $ref: '#/components/schemas/GeoPoint'
+      responses:
+        '200':
+          description: Trip status updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /trips:
+    post:
+      tags:
+        - Trips
+      summary: Create trip and start automatic driver matching
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pickup
+                - dropoff
+                - serviceType
+                - fare
+              properties:
+                pickup:
+                  $ref: '#/components/schemas/LocationInput'
+                dropoff:
+                  $ref: '#/components/schemas/LocationInput'
+                serviceType:
+                  type: string
+                  enum:
+                    - BIKE
+                    - CAR4
+                    - CAR7
+                fare:
+                  $ref: '#/components/schemas/FareEstimate'
+                paymentMethod:
+                  type: string
+                  enum:
+                    - CASH
+                    - E_WALLET
+                    - CARD
+                  default: CASH
+      responses:
+        '201':
+          description: Trip created and matching started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /trips/{tripId}:
+    get:
+      tags:
+        - Trips
+      summary: Get trip details and current status
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Trip details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /trips/{tripId}/events:
+    get:
+      tags:
+        - Trips
+      summary: Get trip status and tracking events
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Ordered trip events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TripEvent'
+  /trips/{tripId}/payment:
+    post:
+      tags:
+        - Trips
+      summary: Retry or switch payment method after trip completion
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - method
+              properties:
+                method:
+                  type: string
+                  enum:
+                    - CASH
+                    - E_WALLET
+                    - CARD
+                paymentToken:
+                  type: string
+                  description: Token from payment gateway; never a card number or CVV.
+      responses:
+        '200':
+          description: Payment result. CAB stores only gateway reference and status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '402':
+          description: Payment failed; trip remains completed and can be paid with cash or retried.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Search and list users
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum:
+              - RIDER
+              - DRIVER
+              - ADMIN
+        - name: accountStatus
+          in: query
+          schema:
+            type: string
+            enum:
+              - ACTIVE
+              - BANNED
+              - PENDING
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: User list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pageInfo:
+                    $ref: '#/components/schemas/PageInfo'
+    patch:
+      tags:
+        - Admin
+      summary: Update user account status
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - accountStatus
+              properties:
+                accountStatus:
+                  type: string
+                  enum:
+                    - ACTIVE
+                    - BANNED
+      responses:
+        '200':
+          description: User updated and audit logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /admin/drivers/{driverId}/approve:
+    post:
+      tags:
+        - Admin
+      summary: Approve a driver account
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Driver approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Driver'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/trips:
+    get:
+      tags:
+        - Admin
+      summary: Monitor trips in real time
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - SEARCHING
+              - ACCEPTED
+              - ARRIVED
+              - PICKED_UP
+              - IN_TRANSIT
+              - COMPLETED
+              - CANCELLED
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Trips for operational monitoring.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trip'
+  /admin/trips/{tripId}/cancel:
+    post:
+      tags:
+        - Admin
+      summary: Force-cancel a trip for operational support
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  example: Vehicle breakdown
+      responses:
+        '200':
+          description: Trip cancelled and audit logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/reports/summary:
+    get:
+      tags:
+        - Admin
+      summary: Get operational and revenue summary
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Dashboard metrics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalTrips:
+                    type: integer
+                    example: 1250
+                  completedTrips:
+                    type: integer
+                    example: 1100
+                  cancelledTrips:
+                    type: integer
+                    example: 150
+                  completionRate:
+                    type: number
+                    format: float
+                    example: 0.88
+                  revenue:
+                    type: number
+                    format: double
+                    example: 152500000
+                  currency:
+                    type: string
+                    example: VND
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token received from /auth/login.
+  schemas:
+    User:
+      type: object
+      required:
+        - userId
+        - phoneNumber
+        - role
+        - accountStatus
+      properties:
+        userId:
+          type: integer
+          format: int64
+          example: 1001
+        phoneNumber:
+          type: string
+          example: '0901234567'
+        email:
+          type: string
+          format: email
+          example: rider@example.com
+        fullName:
+          type: string
+          example: Nguyen Van An
+        role:
+          type: string
+          enum:
+            - RIDER
+            - DRIVER
+            - ADMIN
+          example: RIDER
+        accountStatus:
+          type: string
+          enum:
+            - ACTIVE
+            - BANNED
+            - PENDING
+          example: ACTIVE
+    AuthResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - user
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+        expiresIn:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Invalid request data.
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: dropoff
+              message:
+                type: string
+                example: Dropoff is required.
+    GeoPoint:
+      type: object
+      required:
+        - latitude
+        - longitude
+      properties:
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+          example: 10.7769
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+          example: 106.7009
+    LocationInput:
+      allOf:
+        - $ref: '#/components/schemas/GeoPoint'
+        - type: object
+          required:
+            - address
+          properties:
+            address:
+              type: string
+              example: 1 Le Loi, District 1, Ho Chi Minh City
+    FareEstimate:
+      type: object
+      required:
+        - serviceType
+        - distanceKm
+        - estimatedFare
+        - currency
+      properties:
+        serviceType:
+          type: string
+          enum:
+            - BIKE
+            - CAR4
+            - CAR7
+          example: CAR4
+        distanceKm:
+          type: number
+          format: double
+          example: 8.5
+        estimatedDurationMinutes:
+          type: integer
+          example: 25
+        openingFare:
+          type: number
+          format: double
+          example: 12000
+        pricePerKm:
+          type: number
+          format: double
+          example: 15000
+        estimatedFare:
+          type: number
+          format: double
+          example: 139500
+        currency:
+          type: string
+          example: VND
+    Trip:
+      type: object
+      required:
+        - tripId
+        - riderId
+        - pickup
+        - dropoff
+        - fare
+        - status
+        - createdAt
+      properties:
+        tripId:
+          type: integer
+          format: int64
+          example: 5001
+        riderId:
+          type: integer
+          format: int64
+          example: 1001
+        driverId:
+          type: integer
+          format: int64
+          nullable: true
+          example: 2001
+        pickup:
+          $ref: '#/components/schemas/LocationInput'
+        dropoff:
+          $ref: '#/components/schemas/LocationInput'
+        serviceType:
+          type: string
+          enum:
+            - BIKE
+            - CAR4
+            - CAR7
+          example: CAR4
+        fare:
+          type: number
+          format: double
+          example: 139500
+        currency:
+          type: string
+          example: VND
+        status:
+          type: string
+          enum:
+            - SEARCHING
+            - ACCEPTED
+            - ARRIVED
+            - PICKED_UP
+            - IN_TRANSIT
+            - COMPLETED
+            - CANCELLED
+          example: SEARCHING
+        etaMinutes:
+          type: integer
+          nullable: true
+          example: 7
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+    PageInfo:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+        total:
+          type: integer
+          example: 42
+    Vehicle:
+      type: object
+      required:
+        - vehicleId
+        - licensePlate
+        - vehicleType
+      properties:
+        vehicleId:
+          type: integer
+          format: int64
+          example: 3001
+        licensePlate:
+          type: string
+          example: 51A-123.45
+        vehicleType:
+          type: string
+          enum:
+            - BIKE
+            - CAR4
+            - CAR7
+          example: CAR4
+        brandModel:
+          type: string
+          example: Toyota Vios
+        color:
+          type: string
+          example: White
+    Driver:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            driverId:
+              type: integer
+              format: int64
+              example: 2001
+            workStatus:
+              type: string
+              enum:
+                - OFFLINE
+                - ONLINE
+                - BUSY
+              example: ONLINE
+            currentLocation:
+              $ref: '#/components/schemas/GeoPoint'
+            averageRating:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 5
+              example: 4.8
+            vehicle:
+              $ref: '#/components/schemas/Vehicle'
+    TripEvent:
+      type: object
+      required:
+        - eventType
+        - occurredAt
+      properties:
+        eventType:
+          type: string
+          enum:
+            - DRIVER_ASSIGNED
+            - DRIVER_ARRIVED
+            - TRIP_STARTED
+            - TRIP_COMPLETED
+            - PAYMENT_UPDATED
+        message:
+          type: string
+          example: Driver has arrived at pickup point.
+        location:
+          $ref: '#/components/schemas/GeoPoint'
+        occurredAt:
+          type: string
+          format: date-time
+    Payment:
+      type: object
+      required:
+        - paymentId
+        - tripId
+        - method
+        - amount
+        - status
+      properties:
+        paymentId:
+          type: integer
+          format: int64
+          example: 7001
+        tripId:
+          type: integer
+          format: int64
+          example: 5001
+        method:
+          type: string
+          enum:
+            - CASH
+            - E_WALLET
+            - CARD
+          example: E_WALLET
+        amount:
+          type: number
+          format: double
+          example: 139500
+        status:
+          type: string
+          enum:
+            - PENDING
+            - SUCCESS
+            - FAILED
+          example: SUCCESS
+        transactionRef:
+          type: string
+          nullable: true
+          example: pg_abc123
+  responses:
+    Unauthorized:
+      description: Authentication token is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Request conflicts with the current resource state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

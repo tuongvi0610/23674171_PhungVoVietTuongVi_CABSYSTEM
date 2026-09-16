@@ -1,0 +1,91 @@
+openapi: 3.0.3
+info:
+  title: CAB System API
+  version: 1.0.0
+  description: |
+    API cho nền tảng đặt xe CAB System. Tài liệu bám theo SRS MVP 7 tuần,
+    gồm rider, driver, dispatch, trip, payment và vận hành admin.
+  contact:
+    name: CAB System Development Team
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.cabsystem.example.com/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Local development
+tags:
+  - name: Authentication
+    description: Registration and token lifecycle.
+  - name: Rider
+    description: Customer profile, fare estimate and post-trip actions.
+  - name: Driver
+    description: Driver availability, offers, GPS and trip lifecycle.
+  - name: Trips
+    description: Booking, tracking and payment operations.
+  - name: Admin
+    description: Operational support, user management and reports.
+paths:
+  /auth/register:
+    $ref: './paths/auth.yaml#/register'
+  /auth/login:
+    $ref: './paths/auth.yaml#/login'
+  /auth/refresh:
+    $ref: './paths/auth.yaml#/refresh'
+  /rider/profile:
+    $ref: './paths/rider.yaml#/profile'
+  /rider/estimate:
+    $ref: './paths/rider.yaml#/estimate'
+  /rider/trips:
+    $ref: './paths/rider.yaml#/trips'
+  /rider/trips/{tripId}/cancel:
+    $ref: './paths/rider.yaml#/cancelTrip'
+  /rider/trips/{tripId}/rating:
+    $ref: './paths/rider.yaml#/rating'
+  /driver/profile:
+    $ref: './paths/driver.yaml#/profile'
+  /driver/status:
+    $ref: './paths/driver.yaml#/status'
+  /driver/location:
+    $ref: './paths/driver.yaml#/location'
+  /driver/trip-offers:
+    $ref: './paths/driver.yaml#/offers'
+  /driver/trip-offers/{offerId}/respond:
+    $ref: './paths/driver.yaml#/respond'
+  /driver/trips/{tripId}/status:
+    $ref: './paths/driver.yaml#/tripStatus'
+  /trips:
+    $ref: './paths/trips.yaml#/create'
+  /trips/{tripId}:
+    $ref: './paths/trips.yaml#/detail'
+  /trips/{tripId}/events:
+    $ref: './paths/trips.yaml#/events'
+  /trips/{tripId}/payment:
+    $ref: './paths/trips.yaml#/payment'
+  /admin/users:
+    $ref: './paths/admin.yaml#/users'
+  /admin/drivers/{driverId}/approve:
+    $ref: './paths/admin.yaml#/approveDriver'
+  /admin/trips:
+    $ref: './paths/admin.yaml#/trips'
+  /admin/trips/{tripId}/cancel:
+    $ref: './paths/admin.yaml#/cancelTrip'
+  /admin/reports/summary:
+    $ref: './paths/admin.yaml#/summary'
+components:
+  securitySchemes:
+    BearerAuth:
+      $ref: './components/security.yaml#/components/securitySchemes/BearerAuth'
+  schemas:
+    $ref: './components/schemas.yaml#/components/schemas'
+  responses:
+    Unauthorized:
+      $ref: './components/schemas.yaml#/components/responses/Unauthorized'
+    ValidationError:
+      $ref: './components/schemas.yaml#/components/responses/ValidationError'
+    NotFound:
+      $ref: './components/schemas.yaml#/components/responses/NotFound'
+    Conflict:
+      $ref: './components/schemas.yaml#/components/responses/Conflict'
+security:
+  - BearerAuth: []

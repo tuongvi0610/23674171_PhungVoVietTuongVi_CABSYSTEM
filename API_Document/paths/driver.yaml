@@ -1,0 +1,126 @@
+profile:
+  get:
+    tags: [Driver]
+    summary: Get current driver profile and vehicle
+    responses:
+      '200':
+        description: Driver profile.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Driver' }
+  patch:
+    tags: [Driver]
+    summary: Update driver and vehicle information
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              fullName: { type: string }
+              vehicle: { $ref: '../components/schemas.yaml#/components/schemas/Vehicle' }
+    responses:
+      '200':
+        description: Updated profile.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Driver' }
+status:
+  patch:
+    tags: [Driver]
+    summary: Toggle driver availability
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [workStatus]
+            properties:
+              workStatus: { type: string, enum: [ONLINE, OFFLINE] }
+    responses:
+      '200':
+        description: New driver status.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Driver' }
+      '409': { $ref: '../components/schemas.yaml#/components/responses/Conflict' }
+location:
+  post:
+    tags: [Driver]
+    summary: Send current GPS location
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [location]
+            properties:
+              location: { $ref: '../components/schemas.yaml#/components/schemas/GeoPoint' }
+              recordedAt: { type: string, format: date-time }
+    responses:
+      '202': { description: Location accepted. }
+offers:
+  get:
+    tags: [Driver]
+    summary: List active trip offers assigned to driver
+    responses:
+      '200':
+        description: Active offers.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  offerId: { type: integer, format: int64, example: 9001 }
+                  expiresAt: { type: string, format: date-time }
+                  trip: { $ref: '../components/schemas.yaml#/components/schemas/Trip' }
+respond:
+  post:
+    tags: [Driver]
+    summary: Accept or reject a trip offer within 15 seconds
+    parameters:
+      - { name: offerId, in: path, required: true, schema: { type: integer, format: int64 } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [decision]
+            properties:
+              decision: { type: string, enum: [ACCEPT, REJECT] }
+    responses:
+      '200':
+        description: Offer response processed.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Trip' }
+      '409': { $ref: '../components/schemas.yaml#/components/responses/Conflict' }
+tripStatus:
+  patch:
+    tags: [Driver]
+    summary: Update trip lifecycle status
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: integer, format: int64 } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status]
+            properties:
+              status: { type: string, enum: [ARRIVED, PICKED_UP, IN_TRANSIT, COMPLETED] }
+              location: { $ref: '../components/schemas.yaml#/components/schemas/GeoPoint' }
+    responses:
+      '200':
+        description: Trip status updated.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Trip' }
+      '409': { $ref: '../components/schemas.yaml#/components/responses/Conflict' }

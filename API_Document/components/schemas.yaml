@@ -1,0 +1,143 @@
+components:
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Invalid request data.
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string, example: dropoff }
+              message: { type: string, example: Dropoff is required. }
+    User:
+      type: object
+      required: [userId, phoneNumber, role, accountStatus]
+      properties:
+        userId: { type: integer, format: int64, example: 1001 }
+        phoneNumber: { type: string, example: '0901234567' }
+        email: { type: string, format: email, example: rider@example.com }
+        fullName: { type: string, example: Nguyen Van An }
+        role: { type: string, enum: [RIDER, DRIVER, ADMIN], example: RIDER }
+        accountStatus: { type: string, enum: [ACTIVE, BANNED, PENDING], example: ACTIVE }
+    Driver:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            driverId: { type: integer, format: int64, example: 2001 }
+            workStatus: { type: string, enum: [OFFLINE, ONLINE, BUSY], example: ONLINE }
+            currentLocation:
+              $ref: '#/components/schemas/GeoPoint'
+            averageRating: { type: number, format: float, minimum: 0, maximum: 5, example: 4.8 }
+            vehicle:
+              $ref: '#/components/schemas/Vehicle'
+    Vehicle:
+      type: object
+      required: [vehicleId, licensePlate, vehicleType]
+      properties:
+        vehicleId: { type: integer, format: int64, example: 3001 }
+        licensePlate: { type: string, example: 51A-123.45 }
+        vehicleType: { type: string, enum: [BIKE, CAR4, CAR7], example: CAR4 }
+        brandModel: { type: string, example: Toyota Vios }
+        color: { type: string, example: White }
+    GeoPoint:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, format: double, minimum: -90, maximum: 90, example: 10.7769 }
+        longitude: { type: number, format: double, minimum: -180, maximum: 180, example: 106.7009 }
+    LocationInput:
+      allOf:
+        - $ref: '#/components/schemas/GeoPoint'
+        - type: object
+          required: [address]
+          properties:
+            address: { type: string, example: '1 Le Loi, District 1, Ho Chi Minh City' }
+    FareEstimate:
+      type: object
+      required: [serviceType, distanceKm, estimatedFare, currency]
+      properties:
+        serviceType: { type: string, enum: [BIKE, CAR4, CAR7], example: CAR4 }
+        distanceKm: { type: number, format: double, example: 8.5 }
+        estimatedDurationMinutes: { type: integer, example: 25 }
+        openingFare: { type: number, format: double, example: 12000 }
+        pricePerKm: { type: number, format: double, example: 15000 }
+        estimatedFare: { type: number, format: double, example: 139500 }
+        currency: { type: string, example: VND }
+    Trip:
+      type: object
+      required: [tripId, riderId, pickup, dropoff, fare, status, createdAt]
+      properties:
+        tripId: { type: integer, format: int64, example: 5001 }
+        riderId: { type: integer, format: int64, example: 1001 }
+        driverId: { type: integer, format: int64, nullable: true, example: 2001 }
+        pickup: { $ref: '#/components/schemas/LocationInput' }
+        dropoff: { $ref: '#/components/schemas/LocationInput' }
+        serviceType: { type: string, enum: [BIKE, CAR4, CAR7], example: CAR4 }
+        fare: { type: number, format: double, example: 139500 }
+        currency: { type: string, example: VND }
+        status: { type: string, enum: [SEARCHING, ACCEPTED, ARRIVED, PICKED_UP, IN_TRANSIT, COMPLETED, CANCELLED], example: SEARCHING }
+        etaMinutes: { type: integer, nullable: true, example: 7 }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+    Payment:
+      type: object
+      required: [paymentId, tripId, method, amount, status]
+      properties:
+        paymentId: { type: integer, format: int64, example: 7001 }
+        tripId: { type: integer, format: int64, example: 5001 }
+        method: { type: string, enum: [CASH, E_WALLET, CARD], example: E_WALLET }
+        amount: { type: number, format: double, example: 139500 }
+        status: { type: string, enum: [PENDING, SUCCESS, FAILED], example: SUCCESS }
+        transactionRef: { type: string, nullable: true, example: pg_abc123 }
+    TripEvent:
+      type: object
+      required: [eventType, occurredAt]
+      properties:
+        eventType: { type: string, enum: [DRIVER_ASSIGNED, DRIVER_ARRIVED, TRIP_STARTED, TRIP_COMPLETED, PAYMENT_UPDATED] }
+        message: { type: string, example: Driver has arrived at pickup point. }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+        occurredAt: { type: string, format: date-time }
+    PageInfo:
+      type: object
+      properties:
+        page: { type: integer, minimum: 1, example: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100, example: 20 }
+        total: { type: integer, example: 42 }
+    AuthResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken: { type: string, example: eyJhbGciOiJIUzI1NiIs... }
+        refreshToken: { type: string, example: eyJhbGciOiJIUzI1NiIs... }
+        expiresIn: { type: integer, example: 3600 }
+        user: { $ref: '#/components/schemas/User' }
+  responses:
+    Unauthorized:
+      description: Authentication token is missing or invalid.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Requested resource was not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Request conflicts with the current resource state.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

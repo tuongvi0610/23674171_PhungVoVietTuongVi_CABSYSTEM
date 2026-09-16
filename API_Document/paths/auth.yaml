@@ -1,0 +1,72 @@
+register:
+  post:
+    tags: [Authentication]
+    summary: Register a rider account
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [phoneNumber, password, fullName]
+            properties:
+              phoneNumber: { type: string, example: '0901234567' }
+              password: { type: string, format: password, minLength: 8, example: StrongPass123! }
+              fullName: { type: string, example: Nguyen Van An }
+              email: { type: string, format: email, example: rider@example.com }
+    responses:
+      '201':
+        description: Account created.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/AuthResponse' }
+      '400': { $ref: '../components/schemas.yaml#/components/responses/ValidationError' }
+      '409': { $ref: '../components/schemas.yaml#/components/responses/Conflict' }
+login:
+  post:
+    tags: [Authentication]
+    summary: Login as rider, driver or admin
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [phoneNumber, password]
+            properties:
+              phoneNumber: { type: string, example: '0901234567' }
+              password: { type: string, format: password, example: StrongPass123! }
+    responses:
+      '200':
+        description: Login successful.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/AuthResponse' }
+      '401': { $ref: '../components/schemas.yaml#/components/responses/Unauthorized' }
+refresh:
+  post:
+    tags: [Authentication]
+    summary: Refresh access token
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [refreshToken]
+            properties:
+              refreshToken: { type: string }
+    responses:
+      '200':
+        description: New access token.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accessToken: { type: string }
+                expiresIn: { type: integer, example: 3600 }
+      '401': { $ref: '../components/schemas.yaml#/components/responses/Unauthorized' }

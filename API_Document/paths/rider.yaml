@@ -1,0 +1,117 @@
+profile:
+  get:
+    tags: [Rider]
+    summary: Get current rider profile
+    responses:
+      '200':
+        description: Rider profile.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/User' }
+      '401': { $ref: '../components/schemas.yaml#/components/responses/Unauthorized' }
+  patch:
+    tags: [Rider]
+    summary: Update current rider profile
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              fullName: { type: string, example: Nguyen Van An }
+              email: { type: string, format: email, example: rider@example.com }
+    responses:
+      '200':
+        description: Updated profile.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/User' }
+      '400': { $ref: '../components/schemas.yaml#/components/responses/ValidationError' }
+estimate:
+  post:
+    tags: [Rider]
+    summary: Calculate fixed fare estimate before booking
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [pickup, dropoff, serviceType]
+            properties:
+              pickup: { $ref: '../components/schemas.yaml#/components/schemas/LocationInput' }
+              dropoff: { $ref: '../components/schemas.yaml#/components/schemas/LocationInput' }
+              serviceType: { type: string, enum: [BIKE, CAR4, CAR7] }
+    responses:
+      '200':
+        description: Fare estimate.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/FareEstimate' }
+      '400': { $ref: '../components/schemas.yaml#/components/responses/ValidationError' }
+      '503':
+        description: Map provider unavailable.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Error' }
+trips:
+  get:
+    tags: [Rider]
+    summary: List current rider trips
+    parameters:
+      - { name: status, in: query, schema: { type: string, enum: [SEARCHING, ACCEPTED, COMPLETED, CANCELLED] } }
+      - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+      - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    responses:
+      '200':
+        description: Paginated trips.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items: { type: array, items: { $ref: '../components/schemas.yaml#/components/schemas/Trip' } }
+                pageInfo: { $ref: '../components/schemas.yaml#/components/schemas/PageInfo' }
+      '401': { $ref: '../components/schemas.yaml#/components/responses/Unauthorized' }
+cancelTrip:
+  post:
+    tags: [Rider]
+    summary: Cancel a trip before pickup
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: integer, format: int64 } }
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              reason: { type: string, example: Changed plan }
+    responses:
+      '200':
+        description: Trip cancelled.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Trip' }
+      '404': { $ref: '../components/schemas.yaml#/components/responses/NotFound' }
+      '409': { $ref: '../components/schemas.yaml#/components/responses/Conflict' }
+rating:
+  post:
+    tags: [Rider]
+    summary: Rate a completed trip and driver
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: integer, format: int64 } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [score]
+            properties:
+              score: { type: integer, minimum: 1, maximum: 5, example: 5 }
+              comment: { type: string, example: Friendly and on time. }
+    responses:
+      '201': { description: Rating created. }
+      '400': { $ref: '../components/schemas.yaml#/components/responses/ValidationError' }
+      '409': { $ref: '../components/schemas.yaml#/components/responses/Conflict' }

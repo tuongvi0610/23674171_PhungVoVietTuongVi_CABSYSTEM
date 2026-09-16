@@ -1,0 +1,78 @@
+create:
+  post:
+    tags: [Trips]
+    summary: Create trip and start automatic driver matching
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [pickup, dropoff, serviceType, fare]
+            properties:
+              pickup: { $ref: '../components/schemas.yaml#/components/schemas/LocationInput' }
+              dropoff: { $ref: '../components/schemas.yaml#/components/schemas/LocationInput' }
+              serviceType: { type: string, enum: [BIKE, CAR4, CAR7] }
+              fare: { $ref: '../components/schemas.yaml#/components/schemas/FareEstimate' }
+              paymentMethod: { type: string, enum: [CASH, E_WALLET, CARD], default: CASH }
+    responses:
+      '201':
+        description: Trip created and matching started.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Trip' }
+      '400': { $ref: '../components/schemas.yaml#/components/responses/ValidationError' }
+detail:
+  get:
+    tags: [Trips]
+    summary: Get trip details and current status
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: integer, format: int64 } }
+    responses:
+      '200':
+        description: Trip details.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Trip' }
+      '404': { $ref: '../components/schemas.yaml#/components/responses/NotFound' }
+events:
+  get:
+    tags: [Trips]
+    summary: Get trip status and tracking events
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: integer, format: int64 } }
+    responses:
+      '200':
+        description: Ordered trip events.
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '../components/schemas.yaml#/components/schemas/TripEvent' }
+payment:
+  post:
+    tags: [Trips]
+    summary: Retry or switch payment method after trip completion
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: integer, format: int64 } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [method]
+            properties:
+              method: { type: string, enum: [CASH, E_WALLET, CARD] }
+              paymentToken: { type: string, description: Token from payment gateway; never a card number or CVV. }
+    responses:
+      '200':
+        description: Payment result. CAB stores only gateway reference and status.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Payment' }
+      '402':
+        description: Payment failed; trip remains completed and can be paid with cash or retried.
+        content:
+          application/json:
+            schema: { $ref: '../components/schemas.yaml#/components/schemas/Payment' }
