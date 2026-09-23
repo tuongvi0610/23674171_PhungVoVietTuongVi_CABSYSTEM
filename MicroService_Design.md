@@ -1,7 +1,5 @@
 # CABSYSTEM - KIẾN TRÚC HỆ THỐNG MICROSERVICES & DOMAIN-DRIVEN DESIGN
 
----
-
 ## 1. Phân rã 5 Bounded Contexts & Context Mapping
 
 Hệ thống đặt xe công nghệ (CABSYSTEM) được phân rã theo phương pháp Domain-Driven Design (DDD) thành 5 Bounded Contexts (BC) độc lập, giải quyết các bài toán nghiệp vụ chuyên biệt:
@@ -39,37 +37,38 @@ graph TB
         K_PAY["Topic: cab.payment.events"]
     end
 
-    CA -->|REST / HTTPS| GW
-    DA -->|WSS / HTTPS| GW
+    CA -->|"REST / HTTPS"| GW
+    DA -->|"WSS / HTTPS"| GW
 
-    GW -->|REST / gRPC| BC_IAM
-    GW -->|REST / gRPC| BC_BOOKING
-    GW -->|WebSocket / gRPC| BC_DISPATCH
-    GW -->|REST| BC_PAYMENT
-    GW -->|REST| BC_FLEET
+    GW -->|"REST / gRPC"| BC_IAM
+    GW -->|"REST / gRPC"| BC_BOOKING
+    GW -->|"WebSocket / gRPC"| BC_DISPATCH
+    GW -->|"REST"| BC_PAYMENT
+    GW -->|"REST"| BC_FLEET
 
-    BC_IAM -.->|Cung cấp Identity Claims (Upstream)| BC_BOOKING
-    BC_IAM -.->|Cung cấp Identity Claims (Upstream)| BC_FLEET
+    BC_IAM -.->|"Cung cap Identity Claims - Upstream"| BC_BOOKING
+    BC_IAM -.->|"Cung cap Identity Claims - Upstream"| BC_FLEET
 
-    BC_BOOKING -->|Publish: BookingCreatedEvent| K_BOOK
-    K_BOOK -->|Consume| BC_DISPATCH
+    BC_BOOKING -->|"Publish: BookingCreatedEvent"| K_BOOK
+    K_BOOK -->|"Consume"| BC_DISPATCH
 
-    BC_DISPATCH -->|Publish: TripAssigned, TripCompleted| K_DISP
-    K_DISP -->|Consume: TripAssigned| BC_FLEET
-    K_DISP -->|Consume: TripAssigned, TripCompleted| BC_BOOKING
-    K_DISP -->|Consume: TripCompleted| BC_PAYMENT
+    BC_DISPATCH -->|"Publish: TripAssigned, TripCompleted"| K_DISP
+    K_DISP -->|"Consume: TripAssigned"| BC_FLEET
+    K_DISP -->|"Consume: TripAssigned, TripCompleted"| BC_BOOKING
+    K_DISP -->|"Consume: TripCompleted"| BC_PAYMENT
 
-    BC_PAYMENT -->|Publish: PaymentSuccess, PaymentFailed| K_PAY
-    K_PAY -->|Consume: PaymentSuccess| BC_FLEET
-    K_PAY -->|Consume: PaymentSuccess| BC_BOOKING
+    BC_PAYMENT -->|"Publish: PaymentSuccess, PaymentFailed"| K_PAY
+    K_PAY -->|"Consume: PaymentSuccess"| BC_FLEET
+    K_PAY -->|"Consume: PaymentSuccess"| BC_BOOKING
 
-    BC_DISPATCH -.->|Sync RPC/In-Memory Query| BC_FLEET
+    BC_DISPATCH -.->|"Sync RPC/In-Memory Query"| BC_FLEET
 ```
 
 ### Chiến lược tích hợp liên ngữ cảnh (Context Mapping Relationships)
-- **IAM BC $\rightarrow$ Các BC khác (Customer/Supplier - Conformance):** IAM đóng vai trò Upstream cung cấp Identity Context qua JWT Claims chứa `user_id`, `roles` để các BC Downstream giải mã độc lập mà không cần truy vấn ngược.
-- **Booking BC $\leftrightarrow$ Dispatch BC (Asynchronous Event-Driven):** Tương tác bất đồng bộ thông qua Apache Kafka để chịu tải đột biến (Surge traffic) khi số lượng người đặt xe cùng lúc tăng vọt.
-- **Dispatch BC $\rightarrow$ Payment & Fleet BC (Choreography):** Giao tiếp dựa trên sự kiện khi chuyến xe kết thúc (`TripCompletedEvent`), kích hoạt song song trừ tiền khách và ghi nhận công nợ cho tài xế.
+
+* **IAM BC** $\rightarrow$ **Các BC khác (Customer/Supplier - Conformance):** IAM đóng vai trò Upstream cung cấp Identity Context qua JWT Claims chứa `user_id`, `roles` để các BC Downstream giải mã độc lập mà không cần truy vấn ngược.
+* **Booking BC** $\leftrightarrow$ **Dispatch BC (Asynchronous Event-Driven):** Tương tác bất đồng bộ thông qua Apache Kafka để chịu tải đột biến (Surge traffic) khi số lượng người đặt xe cùng lúc tăng vọt.
+* **Dispatch BC** $\rightarrow$ **Payment & Fleet BC (Choreography):** Giao tiếp dựa trên sự kiện khi chuyến xe kết thúc (`TripCompletedEvent`), kích hoạt song song trừ tiền khách và ghi nhận công nợ cho tài xế.
 
 ---
 
@@ -219,8 +218,6 @@ CREATE TABLE auth_refresh_tokens (
 CREATE INDEX idx_auth_tokens_user ON auth_refresh_tokens(user_id);
 ```
 
----
-
 ### 4.2. Trip Booking Service (PostgreSQL)
 
 ```mermaid
@@ -316,34 +313,34 @@ CREATE INDEX idx_bookings_customer ON bookings(customer_id);
 CREATE INDEX idx_bookings_status ON bookings(status);
 ```
 
----
-
 ### 4.3. Dispatch & Tracking Service (Redis + MongoDB)
 
 ```mermaid
 classDiagram
     class RedisGeoDrivers {
-        <<Redis SortedSet (GEO)>>
-        +Key: active_drivers_geo:{tier}
-        +Member: driver_id
-        +Score: 52-bit Geohash
+        <<Redis SortedSet GEO>>
+        +String key_active_drivers_geo
+        +String member_driver_id
+        +Score geohash_52bit
+        +GEOADD()
+        +GEOSEARCH()
     }
 
     class RedisDispatchLock {
-        <<Redis String Key/Value>>
-        +Key: dispatch:offer:{booking_id}
-        +Value: driver_id
-        +TTL: 15s
+        <<Redis Key-Value TTL>>
+        +String key_dispatch_offer
+        +String value_driver_id
+        +Int ttl_15s
     }
 
     class MongoTripRoute {
         <<MongoDB Document>>
-        +_id: ObjectId
-        +trip_id: UUID
-        +driver_id: UUID
-        +route_status: String
-        +actual_path: GeoJSON LineString
-        +telemetry_samples: Array
+        +ObjectId _id
+        +UUID trip_id
+        +UUID driver_id
+        +String route_status
+        +GeoJSON actual_path
+        +Array telemetry_samples
     }
 
     RedisGeoDrivers ..> RedisDispatchLock : "Match & Offer"
@@ -351,18 +348,20 @@ classDiagram
 ```
 
 #### Redis Data Structures & Operations
+
 ```bash
-# 1. Cập nhật tọa độ tài xế thời gian thực vào tập hợp không gian
+# 1. Cap nhat toa do tai xe thoi gian thuc vao tap hop khong gian
 GEOADD active_drivers_geo:CAB_CAR_4 106.7004 10.7769 "drv_uuid_101"
 
-# 2. Quét tài xế khả dụng gần điểm đón trong bán kính 3km
+# 2. Quet tai xe kha dung gan diem don trong ban kinh 3km
 GEOSEARCH active_drivers_geo:CAB_CAR_4 FROMLONLAT 106.7010 10.7770 BYRADIUS 3 KM ASC COUNT 10
 
-# 3. Đặt khóa độc quyền gửi cuốc cho tài xế (Mutual Exclusion Lock - TTL 15s)
+# 3. Dat khoa doc quyen gui cuoc cho tai xe (Mutual Exclusion Lock - TTL 15s)
 SET dispatch:offer:9b1deb4d-3b7d-4bad-9bdd "drv_uuid_101" EX 15 NX
 ```
 
 #### MongoDB JSON Schema (`trip_routes` Collection)
+
 ```json
 {
   "$jsonSchema": {
@@ -409,38 +408,36 @@ SET dispatch:offer:9b1deb4d-3b7d-4bad-9bdd "drv_uuid_101" EX 15 NX
 }
 ```
 
----
-
 ### 4.4. Driver & Fleet Service (MongoDB)
 
 ```mermaid
 classDiagram
     class DriverPartner {
-        +_id: UUID
-        +user_id: UUID
-        +personal_info: PersonalInfo
-        +driver_license: DriverLicense
-        +vehicle: VehicleUnit
-        +operational_metrics: Metrics
-        +wallet: DriverWallet
-        +system_status: Enum
-        +shift_status: Enum
+        +UUID _id
+        +UUID user_id
+        +Object personal_info
+        +Object driver_license
+        +Object vehicle
+        +Object operational_metrics
+        +Object wallet
+        +String system_status
+        +String shift_status
     }
 
     class VehicleUnit {
-        +plate_number: String
-        +brand: String
-        +model: String
-        +color: String
-        +seat_capacity: Int
-        +service_tier: String
-        +inspection_expiry: Date
+        +String plate_number
+        +String brand
+        +String model
+        +String color
+        +Int seat_capacity
+        +String service_tier
+        +Date inspection_expiry
     }
 
     class DriverWallet {
-        +current_balance: Decimal128
-        +hold_balance: Decimal128
-        +currency: String
+        +Decimal current_balance
+        +Decimal hold_balance
+        +String currency
     }
 
     DriverPartner *-- VehicleUnit
@@ -448,6 +445,7 @@ classDiagram
 ```
 
 #### MongoDB JSON Schema (`drivers` Collection)
+
 ```json
 {
   "$jsonSchema": {
@@ -503,8 +501,6 @@ classDiagram
   }
 }
 ```
-
----
 
 ### 4.5. Payment & Billing Service (PostgreSQL)
 
@@ -598,54 +594,54 @@ sequenceDiagram
     participant Fleet as Fleet Service
     participant Payment as Payment Service
 
-    %% Pha 1: Đặt cuốc & Tìm xe
-    Customer->>Booking: 1. Gửi yêu cầu đặt xe (Ride Request)
+    %% Pha 1: Dat cuoc & Tim xe
+    Customer->>Booking: 1. Gui yeu cau dat xe (Ride Request)
     activate Booking
-    Booking->>Kafka: 2. Phát `BookingCreatedEvent` (Topic: cab.booking.events)
+    Booking->>Kafka: 2. Phat BookingCreatedEvent (Topic: cab.booking.events)
     deactivate Booking
 
-    Kafka->>Dispatch: 3. Lắng nghe `BookingCreatedEvent`
+    Kafka->>Dispatch: 3. Lang nghe BookingCreatedEvent
     activate Dispatch
-    Note over Dispatch: Quét Redis GEO tìm tài xế gần nhất<br/>Tạo lock dispatch:offer (TTL 15s)
-    Dispatch->>Driver: 4. Gửi Offer chuyến đi tới Driver App
-    Driver->>Dispatch: 5. Bấm Chấp nhận chuyến đi
-    Dispatch->>Kafka: 6. Phát `TripAssignedEvent` (Topic: cab.dispatch.events)
+    Note over Dispatch: Quet Redis GEO tim tai xe gan nhat<br/>Tao lock dispatch:offer (TTL 15s)
+    Dispatch->>Driver: 4. Gui Offer chuyen di toi Driver App
+    Driver->>Dispatch: 5. Bam Chap nhan chuyen di
+    Dispatch->>Kafka: 6. Phat TripAssignedEvent (Topic: cab.dispatch.events)
     deactivate Dispatch
 
-    par Đồng bộ trạng thái chuyến và ca xe
-        Kafka->>Booking: 7a. Lắng nghe `TripAssignedEvent` -> Cập nhật Booking: ALLOCATED
-        Kafka->>Fleet: 7b. Lắng nghe `TripAssignedEvent` -> Cập nhật Driver Shift: BUSY
+    par Dong bo trang thai chuyen va ca xe
+        Kafka->>Booking: 7a. Lang nghe TripAssignedEvent -> Cap nhat Booking: ALLOCATED
+        Kafka->>Fleet: 7b. Lang nghe TripAssignedEvent -> Cap nhat Driver Shift: BUSY
     end
 
-    %% Pha 2: Thực hiện hành trình
-    Note over Customer, Driver: Tài xế đón khách, di chuyển và hoàn thành lộ trình
-    Driver->>Dispatch: 8. Bấm "Hoàn thành chuyến đi"
+    %% Pha 2: Thuc hien hanh trinh
+    Note over Customer, Driver: Tai xe don khach, di chuyen va hoan thanh lo trinh
+    Driver->>Dispatch: 8. Bam Hoan thanh chuyen di
     activate Dispatch
-    Dispatch->>Kafka: 9. Phát `TripCompletedEvent` (Topic: cab.dispatch.events)
+    Dispatch->>Kafka: 9. Phat TripCompletedEvent (Topic: cab.dispatch.events)
     deactivate Dispatch
 
-    %% Pha 3: Thanh toán & Đối soát doanh thu
-    Kafka->>Payment: 10. Lắng nghe `TripCompletedEvent`
+    %% Pha 3: Thanh toan & Doi soat doanh thu
+    Kafka->>Payment: 10. Lang nghe TripCompletedEvent
     activate Payment
-    Note over Payment: Kiểm tra Idempotency Key & Gửi lệnh trừ tiền cổng Payment Gateway
+    Note over Payment: Kiem tra Idempotency Key & Gui lenh tru tien
 
-    alt Thanh toán Thành công
-        Payment->>Kafka: 11a. Phát `PaymentSuccessEvent` (Topic: cab.payment.events)
+    alt Thanh toan Thanh cong
+        Payment->>Kafka: 11a. Phat PaymentSuccessEvent (Topic: cab.payment.events)
         deactivate Payment
 
-        par Cập nhật thành công
-            Kafka->>Fleet: 12a. Lắng nghe `PaymentSuccessEvent` -> Cộng 80% doanh thu vào Driver Wallet
-            Kafka->>Booking: 12b. Lắng nghe `PaymentSuccessEvent` -> Cập nhật Booking: COMPLETED
+        par Cap nhat thanh cong
+            Kafka->>Fleet: 12a. Lang nghe PaymentSuccessEvent -> Cong 80% doanh thu vao Driver Wallet
+            Kafka->>Booking: 12b. Lang nghe PaymentSuccessEvent -> Cap nhat Booking: COMPLETED
         end
 
-    else Thanh toán Thất bại (Compensating Transaction)
+    else Thanh toan That bai (Compensating Transaction)
         activate Payment
-        Payment->>Kafka: 11b. Phát `PaymentFailedEvent` (Topic: cab.payment.events)
+        Payment->>Kafka: 11b. Phat PaymentFailedEvent (Topic: cab.payment.events)
         deactivate Payment
 
-        par Kịch bản bồi hoàn
-            Kafka->>Booking: 13a. Lắng nghe `PaymentFailedEvent` -> Chuyển Booking: PAYMENT_FAILED & Ghi nhận nợ
-            Kafka->>Fleet: 13b. Lắng nghe `PaymentFailedEvent` -> Mở khóa ca xe (Driver: ONLINE) và thông báo tài xế
+        par Kich ban boi hoan
+            Kafka->>Booking: 13a. Lang nghe PaymentFailedEvent -> Chuyen Booking: PAYMENT_FAILED & Ghi nhan no
+            Kafka->>Fleet: 13b. Lang nghe PaymentFailedEvent -> Mo khoa ca xe (Driver: ONLINE) va thong bao tai xe
         end
     end
 ```
